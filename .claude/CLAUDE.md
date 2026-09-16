@@ -1,6 +1,44 @@
-# CLAUDE.md - Resume Matcher
+# CLAUDE.md - CVForge (fork of Resume Matcher)
 
-> **Context file for Claude Code.** Full documentation at [docs/agent/README.md](../docs/agent/README.md).
+> **Context file for Claude Code.** CVForge rules: [docs/cvforge/](../docs/cvforge/ARCHITECTURE.md). Upstream documentation: [docs/agent/README.md](../docs/agent/README.md).
+
+---
+
+## CVForge
+
+This repo is a fork of `srbhr/Resume-Matcher`, being turned **gradually** into a personal,
+evidence-based resume generator that runs at zero cost on local Ollama models.
+
+- [ARCHITECTURE.md](../docs/cvforge/ARCHITECTURE.md) — current map, target engine, integration points, file disposition
+- [MIGRATION_PLAN.md](../docs/cvforge/MIGRATION_PLAN.md) — phases, baseline, regression risks
+- [DECISIONS.md](../docs/cvforge/DECISIONS.md) — decision log + open questions
+
+**Target pipeline:** `JD → Job Analyzer → Evidence Store → Exact + Semantic Matching → Evidence Ranking → Human Evidence Review → Writer → Fact Validator → ATS Validator → Renderer → PDF → Final Human Review → Feedback Store`
+
+### CVForge Non-Negotiables
+
+1. **Never use an LLM for work deterministic code can do.** Ladder, first rung that holds wins: deterministic Python → exact matching → local embeddings → rules → cache → LLM. Only Job Analyzer and Writer are allowed LLM calls.
+2. **Every feature must work on Ollama alone.** Other providers stay optional. Keep engine JSON schemas small and flat.
+3. **No resume content without evidence.** Nothing reaches a rendered resume unless it resolves to an allowed Evidence Store record. `restrictions` are hard gates that reject a claim — never warnings.
+4. **Both human checkpoints are mandatory.** Evidence Review (`requirement → evidence → score → reason`) and Final Review. `approved` is reachable only through Final Review.
+5. **Extend, never rewrite.** Add functions and modules; do not change existing signatures, return shapes or thresholds. No cosmetic refactors. No feature removal. No dependency changes without a stated need.
+6. **Cover Letter, Outreach and Interview Prep stay in the code.** They are hidden via the existing config flags (which already default to `False`), never deleted.
+7. **Templates stay.** `classic-ats` will become the default; the seven existing templates remain available.
+8. **New scores must be reproducible** for a fixed input, and carry a human-readable reason.
+
+### Working mode
+
+Delegate to the project subagents in `.claude/agents/` — `architect` and `reviewer` are
+read-only; `evidence-engineer`, `matching-engineer`, `frontend-engineer` and
+`quality-engineer` own their scope. Do not duplicate the same exploration across agents.
+Each returns only: findings, relevant files, risks, recommendations, decisions needed.
+
+### Known baseline issue
+
+The backend suite **cannot run on Windows**: `tests/conftest.py`'s `deny_external_network`
+fixture patches `socket.socket.connect`, which breaks the Proactor event loop's
+`socketpair()` self-pipe, so all ~1056 tests error in setup. Preexisting, platform-specific.
+Verify backend changes in WSL or Docker until it is fixed. See MIGRATION_PLAN.md §1.1.
 
 ---
 
@@ -41,7 +79,7 @@ Before exploring code, read [docs/agent/README.md](../docs/agent/README.md) for 
 cd apps/backend
 uv sync --extra dev                                  # Install Python deps (incl. test deps)
 uv run uvicorn app.main:app --reload --port 8000     # FastAPI on :8000
-uv run pytest                                        # Run backend tests (~444; LLM evals excluded)
+uv run pytest                                        # Run backend tests (1067 collected; LLM evals excluded)
 
 # Frontend (from repo root, in a separate terminal)
 cd apps/frontend
@@ -202,6 +240,13 @@ Do NOT modify without explicit request:
 - CI/CD configuration
 - Docker build behavior
 - Existing tests (removal/disabling)
+
+CVForge additions — do NOT without explicit request:
+- `app/routers/resumes.py` (2489 LOC, owns upload/improve/preview/confirm/PDF/tracker-autocreate — add a new router instead)
+- Existing signatures in `app/services/resume_preservation.py` and `ats.compute_ats_score`
+- Existing dict-shape semantics in `app/database.py`
+- Existing prompt constants in `app/prompts/templates.py` (golden evals depend on them)
+- Cover Letter / Outreach / Interview Prep code, columns, print routes or tests
 
 ---
 

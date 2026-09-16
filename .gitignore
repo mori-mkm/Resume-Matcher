@@ -62,6 +62,8 @@ apps/backend/data/config.json
 .claude/*
 !.claude/CLAUDE.md
 !.claude/settings.json
+# CVForge project subagents are shared team config, not personal workflow.
+!.claude/agents/
 skills-lock.json
 
 # AI assistant tool folders (personal workflow, not tracked)
